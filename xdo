@@ -1,0 +1,99 @@
+#!/usr/bin/python
+
+from __future__ import print_function
+import os
+import sys
+import glob
+import subprocess
+import argparse
+import re
+
+double_glob_re = re.compile('.*\*.*\..*\*.*')
+def subst(template, orig_fn, i):
+    ''' As input, we have a template, and variables to fill in slots:
+        - In the template, $ will be filled in with the original filename,
+        - # will be filled in with `i`.
+
+        There is a (2x2)x(2x2) matrix of possibilities with the template:
+            - Template (has/not asterisk has/not dot) x
+            - Substitution (has/not asterisk has/not dot)
+            
+            When the file portion of the template has an asterisk, replace
+            it with the corresponding file portion of the substitute.
+
+            When the extension portion of the template is an asterisk, replace
+            it with the entirety of the substitute.
+    '''
+    # Amputate parent directories, then reattach after this
+    template_parents, template = os.path.split(template)
+    subst_parents, subst = os.path.split(orig_fn)
+
+    template_file_part, template_ext_part = os.path.splitext(template)
+    subst_file_part, subst_ext_part = os.path.splitext(subst)
+    
+    template_ext_part = template_ext_part.lstrip('.')
+    subst_ext_part = subst_ext_part.lstrip('.')
+
+    if template_file_part.count('*') == 1:
+        file_part = template_file_part.replace('*', subst_file_part)
+        ext_part = template_ext_part.replace('*', subst_ext_part)
+        f = file_part + '.' + ext_part
+
+    else:
+        f = template.replace('*', orig_fn)
+
+    f = f.replace('#', str(i))
+    
+    if template_parents:
+        f = os.path.join(template_parents, f)
+    
+    return f
+
+def main():
+    # ArgumentParser objects look so ugly!
+    parser = argparse.ArgumentParser(
+            description='''Expand a command across globbed files.
+    The glob argument must be wrapped in quotes. The arguments and output
+    arguments are expanded with special characters:
+        - * --> the original filename
+        - *.* --> when two asterisks and a dot are provided, the filename
+            is split by its extension.
+        - # --> a number unique to the file''')
+    parser.add_argument('command', type=str, help='The command to run')
+    parser.add_argument('glob', type=str, 
+            help='The globbed arguments (wrapped in quotes)')
+    parser.add_argument('arguments', metavar='arg', 
+            nargs='*', help='Command line arguments to pass to `command <glob>`')
+    parser.add_argument('-o', '--output', metavar='file', 
+            help='Filename to redirect stdout')
+
+    args = parser.parse_args()
+    command = args.command
+    files = glob.glob(args.glob)
+
+    for i, fn in enumerate(files):
+        arglist = []
+
+        # substitution of the arguments 
+        if args.arguments:
+            for arg in args.arguments:
+                argc = subst(arg, fn, i)
+                arglist.append(argc)
+        
+        # substitution for output redirection
+        if args.output:
+            outfn = subst(args.output, fn, i)
+            out = open(outfn, 'w')
+        else:
+            out = sys.stdout
+
+        p = subprocess.Popen([command, fn] + arglist, stdout=out)
+        p.communicate()
+
+        if out != sys.stdout:
+            out.close()
+    
+    return 0
+
+if __name__ == '__main__':
+    sys.exit(main())
