@@ -60,15 +60,16 @@ def main():
             is split by its extension.
         - # --> a number unique to the file''')
     parser.add_argument('command', type=str, help='The command to run')
+    parser.add_argument('-o', '--output', metavar='file', 
+            help='Filename to redirect stdout')
+
     parser.add_argument('glob', type=str, 
             help='The globbed arguments (wrapped in quotes)')
     parser.add_argument('arguments', metavar='arg', 
             nargs='*', help='Command line arguments to pass to `command <glob>`')
-    parser.add_argument('-o', '--output', metavar='file', 
-            help='Filename to redirect stdout')
 
     args = parser.parse_args()
-    command = args.command
+    command = args.command.split()
     files = glob.glob(args.glob)
 
     for i, fn in enumerate(files):
@@ -87,7 +88,7 @@ def main():
         else:
             out = sys.stdout
 
-        p = subprocess.Popen([command, fn] + arglist, stdout=out)
+        p = subprocess.Popen(command + [fn] + arglist, stdout=out)
         p.communicate()
 
         if out != sys.stdout:
